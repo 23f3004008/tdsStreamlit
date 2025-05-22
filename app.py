@@ -5,7 +5,6 @@ import os
 from io import BytesIO
 import requests
 import urllib.parse
-from dotenv import load_dotenv
 
 def is_lossless(original_img, compressed_bytes):
     compressed_img = Image.open(BytesIO(compressed_bytes))
@@ -19,10 +18,10 @@ def is_lossless(original_img, compressed_bytes):
     
     return np.array_equal(original_array, compressed_array)
 
-load_dotenv()
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8501/")
+# Use st.secrets for credentials
+GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "YOUR_CLIENT_ID"))
+GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "YOUR_CLIENT_SECRET"))
+REDIRECT_URI = st.secrets.get("REDIRECT_URI", os.getenv("REDIRECT_URI", "http://localhost:8501/"))
 
 def get_auth_url():
     params = {
