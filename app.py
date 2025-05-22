@@ -5,6 +5,7 @@ import os
 from io import BytesIO
 import requests
 import urllib.parse
+from streamlit_oauth import OAuth2Component
 
 def is_lossless(original_img, compressed_bytes):
     compressed_img = Image.open(BytesIO(compressed_bytes))
@@ -18,69 +19,36 @@ def is_lossless(original_img, compressed_bytes):
     
     return np.array_equal(original_array, compressed_array)
 
-# Use st.secrets for credentials
-GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "YOUR_CLIENT_ID"))
-GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "YOUR_CLIENT_SECRET"))
-REDIRECT_URI = st.secrets.get("REDIRECT_URI", os.getenv("REDIRECT_URI", "http://localhost:8501/"))
+# Set up OAuth2Component
+client_id = st.secrets["GOOGLE_CLIENT_ID"]
+client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
+redirect_uri = st.secrets["REDIRECT_URI"]
 
-def get_auth_url():
-    params = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "redirect_uri": REDIRECT_URI,
-        "access_type": "offline",
-        "prompt": "consent"
-    }
-    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+oauth2 = OAuth2Component(
+    client_id=client_id,
+    client_secret=client_secret,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    redirect_uri=redirect_uri,
+    scopes=["openid", "email", "profile"],
+)
 
-def exchange_code_for_token(code):
-    data = {
-        "code": code,
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI,
-        "grant_type": "authorization_code"
-    }
-    resp = requests.post("https://oauth2.googleapis.com/token", data=data)
-    return resp.json()
-
-# --- Google OAuth2 Section ---
 st.header("🔐 Google Authentication (Get your id_token)")
 
-if "auth_code" not in st.session_state and "id_token" not in st.session_state:
-    st.markdown("1. Click the button below to authenticate with Google.")
-    auth_url = get_auth_url()
-    st.markdown(f"[Authenticate with Google]({auth_url})", unsafe_allow_html=True)
+result = oauth2.authorize_button("Authenticate with Google")
 
-    st.markdown("""
-    2. After logging in, you'll be redirected to a URL like `http://localhost:8501/?code=...`.
-    3. The app will automatically detect the code and complete authentication.
-    """)
-
-    # Try to get the code from the URL automatically
-    query_params = st.query_params if hasattr(st, 'query_params') else st.experimental_get_query_params()
-    code_in_url = query_params.get("code", [None])[0]
-
-    if code_in_url and "id_token" not in st.session_state:
-        token_data = exchange_code_for_token(code_in_url)
-        if "id_token" in token_data:
-            st.session_state["id_token"] = token_data["id_token"]
-            st.session_state["client_id"] = GOOGLE_CLIENT_ID
-            st.success("Authentication successful!")
-            # Clean up the URL to remove the code param
-            st.experimental_set_query_params()
-        else:
-            st.error(f"Failed to get id_token: {token_data}")
-
-if "id_token" in st.session_state:
-    result_json = {
-        "id_token": st.session_state["id_token"],
-        "client_id": st.session_state["client_id"]
-    }
+if result and "token" in result:
+    id_token = result["token"].get("id_token")
+    access_token = result["token"].get("access_token")
+    st.success("Authentication successful!")
     st.markdown("### Your id_token JSON (copy and submit):")
-    st.code(result_json, language="json")
-    st.button("Clear Authentication", on_click=lambda: st.session_state.clear())
+    st.code({
+        "id_token": id_token,
+        "access_token": access_token,
+        "client_id": client_id
+    }, language="json")
+elif result and "error" in result:
+    st.error(f"OAuth error: {result['error']}")
 
 st.title("📷 Lossless Image Compressor (WebP ≤ 400 bytes)")
 
