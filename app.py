@@ -3,6 +3,9 @@ from PIL import Image
 import numpy as np
 import os
 from io import BytesIO
+import requests
+import urllib.parse
+from dotenv import load_dotenv
 
 def is_lossless(original_img, compressed_bytes):
     compressed_img = Image.open(BytesIO(compressed_bytes))
@@ -15,6 +18,65 @@ def is_lossless(original_img, compressed_bytes):
     compressed_array = np.array(compressed_img)
     
     return np.array_equal(original_array, compressed_array)
+
+load_dotenv()
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8501/")
+
+def get_auth_url():
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "redirect_uri": REDIRECT_URI,
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+
+def exchange_code_for_token(code):
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    resp = requests.post("https://oauth2.googleapis.com/token", data=data)
+    return resp.json()
+
+# --- Google OAuth2 Section ---
+st.header("🔐 Google Authentication (Get your id_token)")
+
+if "auth_code" not in st.session_state and "id_token" not in st.session_state:
+    st.markdown("1. Click the button below to authenticate with Google.")
+    auth_url = get_auth_url()
+    st.markdown(f"[Authenticate with Google]({auth_url})", unsafe_allow_html=True)
+
+    st.markdown("""
+    2. After logging in, you'll be redirected to a URL like `http://localhost:8501/?code=...`.
+    3. Copy the `code` value from the URL and paste it below:
+    """)
+    code_input = st.text_input("Paste the code from the URL here")
+
+    if st.button("Exchange code for id_token") and code_input:
+        token_data = exchange_code_for_token(code_input)
+        if "id_token" in token_data:
+            st.session_state["id_token"] = token_data["id_token"]
+            st.session_state["client_id"] = GOOGLE_CLIENT_ID
+            st.success("Authentication successful!")
+        else:
+            st.error(f"Failed to get id_token: {token_data}")
+
+if "id_token" in st.session_state:
+    result_json = {
+        "id_token": st.session_state["id_token"],
+        "client_id": st.session_state["client_id"]
+    }
+    st.markdown("### Your id_token JSON (copy and submit):")
+    st.code(result_json, language="json")
+    st.button("Clear Authentication", on_click=lambda: st.session_state.clear())
 
 st.title("📷 Lossless Image Compressor (WebP ≤ 400 bytes)")
 
