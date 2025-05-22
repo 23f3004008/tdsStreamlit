@@ -5,7 +5,36 @@ import os
 from io import BytesIO
 import requests
 import urllib.parse
-from streamlit_oauth import OAuth2Component
+from streamlit_google_auth import Authenticate
+
+# --- Google Auth Section ---
+
+st.title('Streamlit Google Auth Example')
+
+authenticator = Authenticate(
+    secret_credentials_path='google_credentials.json',
+    cookie_name='my_cookie_name',
+    cookie_key='this_is_secret',
+    redirect_uri=os.environ.get('REDIRECT_URI', 'http://localhost:8501'),
+)
+
+# Catch the login event
+authenticator.check_authentification()
+
+# Create the login button
+authenticator.login()
+
+if st.session_state.get('connected'):
+    st.image(st.session_state['user_info'].get('picture'))
+    st.write('Hello, '+ st.session_state['user_info'].get('name'))
+    st.write('Your email is '+ st.session_state['user_info'].get('email'))
+    st.write('Your id: ' + str(st.session_state.get('oauth_id')))
+    st.write('Raw user info:')
+    st.code(st.session_state['user_info'], language='json')
+    if st.button('Log out'):
+        authenticator.logout()
+
+# --- Lossless Image Compressor Section ---
 
 def is_lossless(original_img, compressed_bytes):
     compressed_img = Image.open(BytesIO(compressed_bytes))
@@ -18,37 +47,6 @@ def is_lossless(original_img, compressed_bytes):
     compressed_array = np.array(compressed_img)
     
     return np.array_equal(original_array, compressed_array)
-
-# Set up OAuth2Component
-client_id = st.secrets["GOOGLE_CLIENT_ID"]
-client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-redirect_uri = st.secrets["REDIRECT_URI"]
-
-oauth2 = OAuth2Component(
-    client_id=client_id,
-    client_secret=client_secret,
-    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-    token_endpoint="https://oauth2.googleapis.com/token",
-    redirect_uri=redirect_uri,
-    scopes=["openid", "email", "profile"],
-)
-
-st.header("🔐 Google Authentication (Get your id_token)")
-
-result = oauth2.authorize_button("Authenticate with Google")
-
-if result and "token" in result:
-    id_token = result["token"].get("id_token")
-    access_token = result["token"].get("access_token")
-    st.success("Authentication successful!")
-    st.markdown("### Your id_token JSON (copy and submit):")
-    st.code({
-        "id_token": id_token,
-        "access_token": access_token,
-        "client_id": client_id
-    }, language="json")
-elif result and "error" in result:
-    st.error(f"OAuth error: {result['error']}")
 
 st.title("📷 Lossless Image Compressor (WebP ≤ 400 bytes)")
 
