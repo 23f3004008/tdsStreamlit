@@ -55,16 +55,21 @@ if "auth_code" not in st.session_state and "id_token" not in st.session_state:
 
     st.markdown("""
     2. After logging in, you'll be redirected to a URL like `http://localhost:8501/?code=...`.
-    3. Copy the `code` value from the URL and paste it below:
+    3. The app will automatically detect the code and complete authentication.
     """)
-    code_input = st.text_input("Paste the code from the URL here")
 
-    if st.button("Exchange code for id_token") and code_input:
-        token_data = exchange_code_for_token(code_input)
+    # Try to get the code from the URL automatically
+    query_params = st.query_params if hasattr(st, 'query_params') else st.experimental_get_query_params()
+    code_in_url = query_params.get("code", [None])[0]
+
+    if code_in_url and "id_token" not in st.session_state:
+        token_data = exchange_code_for_token(code_in_url)
         if "id_token" in token_data:
             st.session_state["id_token"] = token_data["id_token"]
             st.session_state["client_id"] = GOOGLE_CLIENT_ID
             st.success("Authentication successful!")
+            # Clean up the URL to remove the code param
+            st.experimental_set_query_params()
         else:
             st.error(f"Failed to get id_token: {token_data}")
 
